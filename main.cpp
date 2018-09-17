@@ -15,8 +15,6 @@
 #include "wsld.h"
 #include "version.h"
 
-#define ARRAY_LENGTH(a) (sizeof(a)/sizeof(a[0]))
-
 unsigned long QueryUser(wchar_t *TargetName,wchar_t *username);
 int InstallDist(wchar_t *TargetName,wchar_t *tgzname);
 HRESULT RemoveDist(wchar_t *TargetName);

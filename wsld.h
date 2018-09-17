@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-
+#define ARRAY_LENGTH(a) (sizeof(a)/sizeof(a[0]))
 
 typedef HRESULT (WINAPI *WSLISDISTRIBUTIONREBISTERED)(PCWSTR);
 typedef HRESULT (WINAPI *WSLREGISTERDISTRIBUTION)(PCWSTR,PCWSTR);
@@ -77,25 +77,23 @@ wchar_t *WslGetLxUID(wchar_t *DistributionName,wchar_t *LxUID)
 {
     wchar_t RKey[]=L"Software\\Microsoft\\Windows\\CurrentVersion\\Lxss";
     HKEY hKey;
-    LONG rres;
-    if(RegOpenKeyExW(HKEY_CURRENT_USER,RKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-    {
-        int i;
-        for(i=0;;i++)
-        {
-            wchar_t subKey[200];
-            wchar_t subKeyF[200];
-            wcscpy_s(subKeyF,(sizeof(subKeyF)/sizeof(subKeyF[0])),RKey);
-            wchar_t regDistName[100];
-            DWORD subKeySz = 100;
-            DWORD dwType;
-            DWORD dwSize = 50;
-            FILETIME ftLastWriteTime;
+    LONG regStatus;
 
-            rres = RegEnumKeyExW(hKey, i, subKey, &subKeySz, NULL, NULL, NULL, &ftLastWriteTime);
-            if (rres == ERROR_NO_MORE_ITEMS)
+    if((regStatus = RegOpenKeyExW(HKEY_CURRENT_USER,RKey, 0, KEY_READ, &hKey)) == ERROR_SUCCESS)
+    {
+
+        for(int i=0;;i++)
+        {
+            wchar_t keyAbsolutePath[200];
+            wcscpy_s(keyAbsolutePath,ARRAY_LENGTH(keyAbsolutePath),RKey);
+
+            wchar_t subKey[200];
+            DWORD subKeySize = 100;            
+            FILETIME ftLastWriteTime;
+            regStatus = RegEnumKeyExW(hKey, i, subKey, &subKeySize, NULL, NULL, NULL, &ftLastWriteTime);
+            if (regStatus == ERROR_NO_MORE_ITEMS)
                 break;
-            else if(rres != ERROR_SUCCESS)
+            else if(regStatus != ERROR_SUCCESS)
             {
                 //ERROR
                 LxUID = NULL;
@@ -103,11 +101,20 @@ wchar_t *WslGetLxUID(wchar_t *DistributionName,wchar_t *LxUID)
             }
 
             HKEY hKeyS;
-            wcscat_s(subKeyF,(sizeof(subKeyF)/sizeof(subKeyF[0])),L"\\");
-            wcscat_s(subKeyF,(sizeof(subKeyF)/sizeof(subKeyF[0])),subKey);
-            RegOpenKeyExW(HKEY_CURRENT_USER,subKeyF, 0, KEY_READ, &hKeyS);
-            RegQueryValueExW(hKeyS, L"DistributionName", NULL, &dwType, (LPBYTE)&regDistName,&dwSize);
-            if((subKeySz == 38)&&(wcscmp(regDistName,DistributionName)==0))
+            wcscat_s(keyAbsolutePath,ARRAY_LENGTH(keyAbsolutePath),L"\\");
+            wcscat_s(keyAbsolutePath,ARRAY_LENGTH(keyAbsolutePath),subKey);
+            regStatus = RegOpenKeyExW(HKEY_CURRENT_USER,keyAbsolutePath, 0, KEY_READ, &hKeyS);
+
+            DWORD dwType;
+            unsigned int size = wcslen(DistributionName);
+            wchar_t regDistName[size * 2];
+            DWORD dwSize = (size * 2) + 2;
+            regStatus = RegQueryValueExW(hKeyS, L"DistributionName", NULL, &dwType, (LPBYTE)&regDistName, &dwSize);
+            if (regStatus != ERROR_SUCCESS)
+            {
+                fwprintf(stderr,L"ERROR:[%i] Could not read registry key\n", regStatus);
+            }
+            if((subKeySize == 38)&&(wcscmp(regDistName,DistributionName)==0))
             {
                 //SUCCESS:Distribution found!
                 //return LxUID
@@ -117,14 +124,8 @@ wchar_t *WslGetLxUID(wchar_t *DistributionName,wchar_t *LxUID)
                 return LxUID;
             }
             RegCloseKey(hKeyS);
-            }
         }
-        else
-        {
-        //ERROR
-        LxUID = NULL;
-        return LxUID;
-        }
+    }
     RegCloseKey(hKey);
     //ERROR:Distribution Not Found
     LxUID = NULL;
